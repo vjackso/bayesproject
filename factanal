@@ -1,0 +1,64 @@
+# Load the data
+data <- read.csv("MULTIIS.csv", header = TRUE)
+
+# View the first 6 rows
+head(data)
+
+N <- nrow(data)
+# N = 333
+D <- ncol(data)
+# D is 22
+# Goal: reduce correlation between question to a few determining factors,
+# through Bayesian Factor Analysis
+
+# One row is x value
+# K is a value less than D
+
+# PART 1 
+# Factor Analysis
+
+#varimax(X)
+
+# PART 2
+# Maximum Likelihood Factor Analysis
+# entering data and extracting 5 factors, (5 f)
+# with varimax rotation
+
+# Determine Number of Factors to Extract
+library(nFactors)
+ev <- eigen(cor(data)) # get eigenvalues
+ev
+ap <- parallel(subject=nrow(data),var=ncol(data),
+               rep=100,cent=.05)
+nS <- nScree(x=ev$values, aparallel=ap$eigen$qevpea)
+plotnScree(nS)
+# KASIER CRITERION (discard all eigen values less than 1) (careful too strict)
+# SCREE plot (find the spot where the slope of the line becomes less steep.)
+# KAISER: 6 factors
+# SCREE: 4 factors
+# Try and find the number of hidden variables use this plot
+
+# Fit the Factor Analysis
+Fit_6 <- factanal(data,6, rotation = 'varimax')
+# look at fit of Fit and evaluate The test of hypothesis
+
+Fit_4 <- factanal(data,4, rotation = 'varimax')
+
+Fit_3 <- factanal(data,3, rotation = 'varimax')
+
+
+plot(Fit_6$loadings[,1:2], type = "n")
+text(Fit_6$loadings[,1:2],labels=names(data),cex=.7)
+
+plot(Fit_4$loadings[,1:2], type = "n")
+text(Fit_4$loadings[,1:2],labels=names(data),cex=.7)
+
+plot(Fit_3$loadings[,1:2], type = "n")
+text(Fit_3$loadings[,1:2],labels=names(data),cex=.7)
+
+# STEP ONE:
+# FIND LIKELIHOOD function
+# Both for each observations AND for matrix
+
+# Since the parameters are unknown we need to estimate them
+
