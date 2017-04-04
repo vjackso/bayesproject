@@ -1,0 +1,138 @@
+### HAVE NOT TESTED AT ALL DON"T KNOW IF IT WILL WORK 
+## GIBBS SAMPLING NOT DONE
+
+### X is N by D
+library("psych")
+set.seed(1234)
+data <- read.csv("MULTIIS.csv", header = TRUE)
+N <- nrow(data)
+D <- ncol(data)
+K <- 3
+X <- as.matrix(data)
+
+fact <- matrix(data = rnorm(K * N), nrow = N, ncol = K)
+# N by K
+lambda <- matrix(data = rnorm(D * K),nrow = D, ncol = K)
+# D by K
+psi <- diag(c(1:D))
+#D by D
+
+## loglikelihood l( X| F,psi,lambda)
+
+lik <- function(factors,lambda,psi,X){
+  N <- nrow(X)
+  D <- ncol(X)
+  l <- det(psi)^(-(N/2)) * exp((-1/2) * tr( solve(psi) %*% (t(X - factors %*% t(lambda))) %*%   (X - factors%*%t(lambda))))
+  l
+}
+
+lik(factors = fact, lambda = lambda, psi = psi, X = X)
+
+#MARGINAL DENSITY 
+
+
+## PRIORS
+#proportional so some of the constants are removed
+
+## p(psi)
+# the inverse gamma for each simg2 is the same as inverted wisheart distribution 
+# for psi with some parameter changes
+# inverse gamma prior now sigma2|X is also inv-gamma
+
+# B and v are not defined ( need to be assessed )
+prior.psi <- function(psi, B, v){
+  l <- det(psi)^v * exp((-1/2)*tr(solve(psi)*Beta))
+  l
+}
+
+# normal 
+#p(lambda|psi)
+# lambda0 and H are not defined ( need to be assessed )
+prior.lambda <- function(lambda,psi,lambda0, H){
+  K <- ncol(lambda) 
+  l <- det(psi)^(K/2)exp((-1/2)*tr(solve(psi) %*% (lambda - lambda0) %*%  H %*%  (lambda - lambda0)))
+  l
+}
+
+#p(F), f is normal (0,1)
+prior.F <- function(factors){
+  l <- exp((-1/2) * tr(t(factors)%*% factors))
+  l
+}
+
+#Posterior
+
+post <- function(lambda,factors,B,v,psi,lambda0,H,X){
+  l <- lik(factors= factors,lambda= lambda,psi = psi,X = X)
+  p1 <- prior.psi
+  p2 <- prior.lambda(lambda = lambda,psi =psi,lambda0 = lambda0, H = H)
+  p3 <- prior.F(factors = factors)
+  post1 <- l*p1*p2*p3
+  post1
+}
+  
+#marginal posterior
+
+mar.post.lambda <- function(lambda,factors,B,v,psi,lambda0,H,X){
+  l.hat <- (t(X)%*%factors + lambda0%*%H)%*% solve( H + t(factors)%*%factors)
+  m <- exp( (-1/2)*tr( solve(psi) %*% (lambda - l.hat)%*% (H + t(factors)%*%factors) %*% t(lambda - l.hat) ))
+  m
+}
+
+
+mar.post.lambda <- function(lambda,factors,B,v,psi,lambda0,H,X){
+  N <- nrow(X)
+  K <- ncol(factors)
+  U <- (X - factors%*%t(lambda)) %*% t(X - factors%*%t(lambda)) + (lambda - lambda0)%*%H%*%t(lambda-lambda0) + B
+  m <- det(psi)^(-(N + K + v)/2) * exp((-1/2)*tr(solve(psi)%*%U))
+  m
+}
+
+
+mar.post.F <- function(lambda,factors,B,v,psi,lambda0,H,X){
+  N <- nrow(X)
+  K <- ncol(factors)
+  Id <- diag(K)
+  f.hat <- X%*%solve(psi)%*%lambda%*% solve(Id + t(lambda)%*%solve(psi)%*%lambda)
+  m <- exp(-(1/2)*tr((factors - f.hat) %*% (Id + (t(lambda)%*%solve(psi)%*%lambda)) %*% t(factors - f.hat)))
+  m
+}
+
+ 
+#GIBBS SAMPLING 
+# initial values
+# lambda_0
+# psi_0
+# F_0
+
+
+# use inital values to extract from marginal posteriors to UPDATE
+# 
+Gibbs <-  function(n){ # n is the number of iterations?
+  
+  #Initialize values
+  f.mat <- matrix(nrow= N, ncol = K) # N x K
+  lambda.mat <- matrix(nrow = D, ncol = K) # D x K
+  psi.mat <- matrix(nrow = D, nrow = D) # D x D
+  
+  # Initialize matrices for storage
+  
+  
+  # loop for MCMC 
+  for (i in 1:N){
+  
+  #UPDATE F
+  
+  #UPDATE PSI
+  
+  #UPDATE LAMBDA
+  
+  #STORE RESULTS
+  
+  }
+  # return values
+  f.mat
+  lambda.mat
+  psi.mat
+}
+ 
