@@ -1,0 +1,242 @@
+#TO DO:
+# TESTING CODE!!!! (most important)
+# Comment Code
+# Bayesian Estimation: complete
+# ICM Estimation: complete
+
+# Add in factanal results/ Frequentist Analysis
+
+### X is N by D
+library("expm")
+library("psych")
+set.seed(1234)
+data <- read.csv("MULTIIS.csv", header = TRUE)
+X <- as.matrix(data)
+x <- X[1:50,] # reduce the number of rows (subjects), this makes it easier for visualization
+N <- nrow(data)
+D <- ncol(data)
+K <- 3
+
+## loglikelihood l( X| F,psi,lambda)
+lik <- function(factors,lambda,psi,X){
+  N <- nrow(X)
+  D <- ncol(X)
+  l <- det(psi)^(-(N/2)) * exp((-1/2) * tr( solve(psi) %*% (t(X - factors %*% t(lambda))) %*%   (X - factors%*%t(lambda))))
+  l
+}
+
+## Hyper Parameter assesment 
+lambda.0 <- function(X,K,Sigma){
+  N <- nrow(X)
+  # decomposition
+  dec <- eigen(Sigma, symmetric = TRUE)
+  gamma <- dec$vectors
+  D.0 <- dec$values
+  # Keep only the top K values
+  D.0 <- round(x = diag(D.0[c(1:K)]), digits = 3) # Largest K values, create K x K matrix
+  gamma <- round(x = gamma[,c(1:K)], digits = 3) # Corresopnding K vectors, columns, create D x K matrix
+  lambda_0 <- round(x = gamma %*% sqrt(D.0),digits = 3) # create lambda_0, a D x K matrix
+  return(lambda_0) 
+}
+
+v <- 2*D - 3
+
+# Initialize Parameters for Hyperparameter estimation
+Sigma <- 0
+Psi <- 0
+lambda0 <- 0
+
+#Convergence code for Hyperparameters
+threshold = 0.001 # create threshold
+iter = 1000 # number of iterations for estimation
+Sigma_1 <- cov(X) # Sigma is the Variance-Covariance matrix of X
+Sigma_1[Sigma_1 < 0] = 0 # Make Sigma > 0
+l0_1 <- lambda.0(X,K,Sigma_1) # Find initial estimate of Lambda_0
+Psi_1 <- Sigma_1 - ((l0_1)%*%t(l0_1)) # Use initial estimate to create Psi
+i = 0
+# For Loop for convergence 
+while(i < iter){
+  Psi_2 <- diag(diag(Psi_1)) # 
+  Sigma_2 <- Sigma_1 - Psi_2
+  Sigma_2[Sigma_2 < 0] = 0
+  l0_2 <- lambda.0(X,K,Sigma_2)
+  dif1 <- l0_1 - l0_2
+  dif2 <- Psi_1 - Psi_2
+  dif1.sq <- (dif1)%*%t(dif1)
+  dif2.sq <- (dif2)%*%t(dif2)
+  if ((tr(dif2.sq) < threshold) && (tr(dif1.sq) < threshold)){
+  break 
+  }
+  #Update Values for Next iteration
+  Sigma_1 <- Sigma_2
+  Psi_1 <- Psi_2
+  l0_1 <- l0_2 
+  i = i + 1
+}
+# Assign Converged values to Parameters
+Sigma <- Sigma_2
+Psi <- Psi_2
+lambda0 <- l0_2
+
+# Apply hyperparameter functions to get estimates of hyperparameters
+B <- round(diag(diag(Psi)),3) # B is the matrix of diagonal values of Psi, round the values to 3 decimial points
+
+# Estimating H
+psi.star <- Psi^(-1/2) # Inverse Square root Psi matrix
+psi.star[psi.star == Inf] <- 0 # convert all Inf Values to 0
+psi.star <- round(psi.star,3) # round the result to 3 decimial places
+Delta <- t(psi.star%*%lambda_0) # create delta matrix, Delta is (3 x 22)
+m <- rowMeans(Delta) # calculate the row means of Delta
+H <- matrix(0,nrow = K,ncol = K) # create empty matrix to store values
+for (i in 1:D){ # for loop for estimating H
+  H = H + (Delta[,i]- m)%*%t(Delta[,i] - m)
+}
+H <- solve((1/D)*H) # Estimate H
+
+#Now we have our Hyper Parameters Estimated (lambda0,v,B,H)
+
+## PRIORS
+prior.psi <- function(psi, B, v){
+  l <- (det(psi)^v)* exp((-1/2)*tr(solve(psi)%*%B))
+  return(l)
+}
+
+prior.lambda <- function(lambda,psi,lambda0, H){
+  K <- ncol(lambda) 
+  l <- det(psi)^(K/2)exp((-1/2)*tr(solve(psi) %*% (lambda - lambda0) %*%  H %*%  (lambda - lambda0)))
+  return(l)
+}
+
+prior.F <- function(factors){
+  l <- exp((-1/2) * tr(t(factors)%*% factors))
+  return(l)
+}
+
+#POSTERIOR
+post <- function(lambda,factors,B,v,psi,lambda0,H,X){
+  l <- lik(factors= factors,lambda= lambda,psi = psi,X = X)
+  p1 <- prior.psi
+  p2 <- prior.lambda(lambda = lambda,psi =psi,lambda0 = lambda0, H = H)
+  p3 <- prior.F(factors = factors)
+  post1 <- l*p1*p2*p3
+  post1
+}
+  
+#marginal posterior
+mar.post.lambda <- function(lambda,factors,B,v,psi,lambda0,H,X){
+  l.hat <- (t(X)%*%factors + lambda0%*%H)%*% solve( H + t(factors)%*%factors)
+  m <- exp((-1/2)*tr( solve(psi)%*%(lambda - l.hat)%*%(H + t(factors)%*%factors)%*%t(lambda - l.hat) ))
+  return(m)
+}
+
+mar.post.psi <- function(lambda,factors,B,v,psi,lambda0,H,X){
+  N <- nrow(X)
+  K <- ncol(factors)
+  U <- (X - factors%*%t(lambda)) %*% t(X - factors%*%t(lambda)) + (lambda - lambda0)%*%H%*%t(lambda-lambda0) + B
+  m <- det(psi)^(-(N + K + v)/2) * exp((-1/2)*tr(solve(psi)%*%U))
+  return(m)
+}
+
+mar.post.F <- function(lambda,factors,B,v,psi,lambda0,H,X){
+  N <- nrow(X)
+  K <- ncol(factors)
+  Id <- diag(K)
+  f.hat <- X%*%solve(psi)%*%lambda%*% solve(Id + t(lambda)%*%solve(psi)%*%lambda)
+  m <- exp(-(1/2)*tr((factors - f.hat) %*% (Id + (t(lambda)%*%solve(psi)%*%lambda)) %*% t(factors - f.hat)))
+  return(m)
+}
+
+# ESTIMATES
+
+# MEAN ESTIMATES 
+W = t(X)%*%X + B + lambda0 %*%H%*% t(lambda0)
+P = diag(N) - X%*%solve(W)%*%t(X)
+f.hat <- solve(P)%*%X%*%solve(W)%*%lambda_0%*%H
+lambda.hat <- (t(X)%*%f.hat + lambda0%*%H)%*%solve(H + t(f.hat)%*%f.hat)
+U <- t(X - f.hat%*%t(lambda.hat))%*%(X - f.hat%*%t(lambda.hat)) + (lambda.hat -lambda0)%*%H%*%t(lambda.hat -lambda0) + B
+psi.hat <- U/(N+K+v-2*D-2)
+
+# Estimates of Factors
+f.hat
+# Estimates of Factor Loading Matrix
+lambda.hat
+# Estimates of Covariance Matrix
+psi.hat
+
+# ICM Estimates
+# Convergence Algorithm
+# Use the previous f.hat, lambda.hat, psi.hat as initial estimates
+
+# Initial Estimates
+f_old <- f.hat
+l_old <- lambda0
+psi_old <- Psi
+threshold = 0.0001
+iter = 10000
+
+# For Loop for convergence
+for(j in c(1:iter)){
+l_i <- (t(X)%*%f_old + lambda0%*%H)%*%solve(H + t(f_old)%*%f_old)
+psi_i <- (t(X - f_i%*%t(l_i))%*%(X - f_i%*%t(l_i)) + (l_i - lambda0)%*%H%*%t(l_i - lambda0) + B)/(N + K + v)
+f_i <- X%*%solve(psi_i)%*%l_i%*%solve(diag(K) + t(l_i)%*%solve(psi_i)%*%l_i)
+if((abs(mean(colMeans(f_i - f_old))) < threshold) && 
+   (abs(mean(colMeans(l_i - l_old))) < threshold) && 
+   (abs(mean(colMeans(psi_i - psi_old))) < threshold)) 
+   {
+  break
+}
+#Update Values for next iteration
+f_old <- f_i
+l_old <- l_i
+psi_old <- psi_i
+}
+# Takes 4679 iterations 
+
+# ICM Estimates
+f.icm <- f_i 
+lambda.icm <- l_i
+psi.icm <- psi_i
+
+#GIBBS SAMPLING 
+
+# Initialize Estimates
+f.old <- f.hat
+l.old <- lambda0
+psi.old <- Psi
+
+# For Loop for convergence
+for (l in 1:iter){
+  # NEED TO MAKE THE MARGINAL DISTRIBUTIONS OUTPUT A MATRIX
+  lambda.mat <- mar.post.lambda(l.old,f.old,B,v,psi.old,lambda0,H,X)
+  psi.mat <- mar.post.psi(lambda.mat,f.old,B,v,psi.old,lambda0,H,X)
+  f.mat <- mar.post.F(lambda.mat,f.old,B,v,psi.mat,lambda0,H,X)
+  
+  if((abs(mean(colMeans(f.mat - f.old))) < threshold) && 
+     (abs(mean(colMeans(l.mat - l.old))) < threshold) && 
+     (abs(mean(colMeans(psi.mat - psi.old))) < threshold)) 
+  {break
+  }
+  # STORE ESTIMATES
+  f.up = f.up+f.mat
+  l.up = l.up+l.mat
+  psi.up = psi.up+psi.mat
+  
+  #UPDATE Estimates
+  l.old <- lambda.mat  
+  psi.old <- psi.mat
+  f.old <- f.mat 
+  }
+  
+# Take the means of the first l iterations
+f.mat <- (1/l)*f.up
+lambda.mat <- (1/l)*l.up
+psi.mat <- (1/l)*psi.up
+
+# Gibbs Sampling Estimates
+f.gibb <- f.mat
+lambda.gibb <- lambda.mat
+psi.gibb <- psi.mat
+
+#### TEST FOR CHECKING CODE ####
+
+factanal(X,3,rotation = "varimax")
